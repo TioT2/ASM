@@ -1,0 +1,13 @@
+build: frame.com
+
+frame.com: frame.obj
+	tlink /t /v frame.obj
+
+frame.obj:
+	tasm /la frame.asm
+
+clean:
+	del frame.com
+	del frame.obj
+	del frame.lst
+	del frame.map

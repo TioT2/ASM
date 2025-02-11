@@ -1,0 +1,13 @@
+build: hello.com
+
+hello.com: hello.obj
+	tlink /t hello.obj
+
+hello.obj:
+	tasm /la hello.asm
+
+clean:
+	del hello.com
+	del hello.obj
+	del hello.lst
+	del hello.map
