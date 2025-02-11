@@ -7,9 +7,9 @@
 ; Build string constasnt
 String db "Hello world!!!1!", '$'
 
-; Message box palette
 ; Palette dw 0F30h, 0F31h, 0F32h, 0F33h, 0F34h, 0F35h, 0F36h, 0F37h, 0F38h, 0F39h
-Palette dw 0FC9h, 0FCDh, 0FBBh,    0FBAh, 0F20h, 0FBAh,    0FC8h, 0FCDh, 0FBCh
+; Palette dw 0FC9h, 0FCDh, 0FBBh,    0FBAh, 0F20h, 0FBAh,    0FC8h, 0FCDh, 0FBCh
+Palette dw 0F0C9h, 0F0CDh, 0F0BBh,    0F0BAh, 0F020h, 0F0BAh,    0F0C8h, 0F0CDh, 0F0BCh
 
 .code
 
@@ -21,15 +21,21 @@ start:
         mov ax, 0b800h
         mov es, ax
 
-        mov bx, offset Palette
-        mov cx, offset String
-        mov si, 328
+        mov di, 328            ; destination
+        mov si, offset Palette ; palette
+        mov bx, 4              ; height
+        mov cx, 8              ; width
+        call write_box
 
-        call write_message_box
+        ; mov bx, offset Palette
+        ; mov cx, offset String
+        ; mov si, 328
+        ; call write_message_box
 
-        mov ah, 86h
-        mov cx, 2Fh
-        int 15h
+	; Wait
+        ; mov ah, 86h
+        ; mov cx, 2Fh
+        ; int 15h
 
         ; Exit with 0 code.
         mov ax, 4C00h
@@ -45,132 +51,104 @@ start:
 
 ; Calculate message length
 ; IN:
-;	message - bx
+;	message - di
 ; OUT:
-;	length - ax
+;	length - cx
 ; USES:
-;	ax, bx, dx
+;	ax, cx, di
 get_message_len proc
-	xor ax, ax
+	; cx = -1
+	xor cx, cx
+	dec cx
 
-	jmp ??test
+	; Write string end character
+	mov al, 24h
 
-??continue:
-	inc ax
-	inc bx
+	; Find end character
+	repnz scasb
 
-??test:
-	mov dl, byte ptr [bx]
-	cmp dl, 24h
-	jne ??continue
+	neg cx
+	dec cx
 
 	ret
 endp
 
 ; Write line by palette segment (e.g. single frame element)
 ; IN:
-; 	destination - si 
-;	palette     - bx
-;	end         - cx
+; 	destination - ES:DI
+;	palette     - DS:SI
+;	length      - CX
 ; USES:
-;	si, dx
+;	SI, DI, CX, AX
+; NOTE:
+;	Function adds exactly 6 to initial SI register value.
 write_line proc
-	; First character
-	mov dx, word ptr [bx]
-	mov word ptr es:[si], dx
-	add si, 2
+	; Load from [si] to ax
+	; Store palette entry to [di]
+	lodsw
+	stosw
 
-	stosw 
+	; Load next palette entry
+	; Write center
+	lodsw
+	rep stosw
 
-??start:
-	cmp si, cx
-	je ??end
+	; Load from [si] to ax
+	; Store palette entry to [di]
+	lodsw
+	stosw
 
-	; Put pixel
-	mov dx, word ptr [bx + 2]
-	mov word ptr es:[si], dx
-	add si, 2
-
-	jmp ??start
-
-??end:
-	mov  dx, word ptr [bx + 4]
-	mov word ptr es:[si], dx
 	ret
 endp
 
-; Write message box
-;  IN:
-;	palette - bx
-;	message - cx
-;	offset  - si
-; USES:
-;	??? (all registers)
-write_message_box proc
-	; Save string contents
+; Write box
+; IN:
+;	destination - di
+;	palette     - si
+;	height      - bx
+;	width       - cx
+write_box proc
+	push cx
+	; Save di into dx
+	mov dx, di
+	call write_line
+	mov di, dx
+	pop cx
+
+	; cx - height, bx - width now
+	xchg cx, bx
+
+	; DX = initial destination value
+	mov dx, di
+
+	jmp ??loop_test
+
+??loop:
 	push cx
 
-	; Calculate length
-	xchg bx, cx
-	call get_message_len
-	xchg bx, cx
+	; cx = height
+	mov cx, bx
+	mov di, dx
 
-	inc ax
-	shl ax, 1
-
-	; Write first line
-	lea cx, [si + 4]
-	add cx, ax
-	push si
 	call write_line
-	pop si
 
-	add bx, 6
+	; Restore SI value
+	sub si, 6
 
-	; Write intermediate characters
-	lea di, [si + 160 * 4]
-	jmp ??cmp
+	pop cx
 
-??start:
-	lea cx, [si + 4]
-	add cx, ax
-	push si
-	call write_line
-	pop si
-
-??cmp:
-	add si, 160
-	cmp si, di
-	jl ??start
-
-	add bx, 6
+??loop_test:
+	add dx, 0A0h
+	; Does test instruction usage worth it?
+	loop ??loop
 
 	; Write last line
-	lea cx, [si + 4]
-	add cx, ax
-	push si
+	add si, 6
+	mov di, dx
+	mov cx, bx
 	call write_line
-	pop si
 
-	; Restore string contents into bx
-	pop bx
-
-	; Move cursor
-	sub si, 316
-	jmp ??str_cmp
-
-??str_start:
-	; Write current character to screen
-	mov byte ptr es:[si], dl
-	add si, 2
-	inc bx
-
-??str_cmp:
-	; Load current character and check if it is not '$'
-	mov dl, byte ptr [bx]
-	cmp dl, 24h
-	jne ??str_start
-
+??end:
 	ret
 endp
 

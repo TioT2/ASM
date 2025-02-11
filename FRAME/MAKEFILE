@@ -1,3 +1,17 @@
+run:
+	make rebuild
+	frame
+
+rebuild:
+	make clean
+	make build
+
+clean:
+	del frame.com
+	del frame.obj
+	del frame.lst
+	del frame.map
+
 build: frame.com
 
 frame.com: frame.obj
@@ -5,9 +19,3 @@ frame.com: frame.obj
 
 frame.obj:
 	tasm /la frame.asm
-
-clean:
-	del frame.com
-	del frame.obj
-	del frame.lst
-	del frame.map
