@@ -9,7 +9,7 @@ String db "Hello world!!!1!", '$'
 
 ; Palette dw 0F30h, 0F31h, 0F32h, 0F33h, 0F34h, 0F35h, 0F36h, 0F37h, 0F38h, 0F39h
 ; Palette dw 0FC9h, 0FCDh, 0FBBh,    0FBAh, 0F20h, 0FBAh,    0FC8h, 0FCDh, 0FBCh
-Palette dw 0F0C9h, 0F0CDh, 0F0BBh,    0F0BAh, 0F020h, 0F0BAh,    0F0C8h, 0F0CDh, 0F0BCh
+Palette dw 0F0C9h, 0F0CDh, 0F0BBh,    0F0BAh, 0F021h, 0F0BAh,    0F0C8h, 0F0CDh, 0F0BCh
 
 .code
 
@@ -51,11 +51,11 @@ start:
 
 ; Calculate message length
 ; IN:
-;	message - di
+;	message - ES:DI
 ; OUT:
-;	length - cx
+;	length - CX
 ; USES:
-;	ax, cx, di
+;	AX, CX, DI
 get_message_len proc
 	; cx = -1
 	xor cx, cx
@@ -82,6 +82,7 @@ endp
 ;	SI, DI, CX, AX
 ; NOTE:
 ;	Function adds exactly 6 to initial SI register value.
+;	Function adds exactly CX * 2 + 4 to initial DI value.
 write_line proc
 	; Load from [si] to ax
 	; Store palette entry to [di]
@@ -107,44 +108,59 @@ endp
 ;	palette     - si
 ;	height      - bx
 ;	width       - cx
+; USES:
+;	AX, BX, CX, DX, DI, SI
 write_box proc
-	push cx
-	; Save di into dx
-	mov dx, di
+	cld
+
+	mov dx, cx
+
 	call write_line
-	mov di, dx
-	pop cx
 
-	; cx - height, bx - width now
-	xchg cx, bx
+	mov cx, dx
 
-	; DX = initial destination value
-	mov dx, di
+	; Restore DI
+	sub di, cx
+	sub di, cx
+	sub di, 4
+
+	; DX = height
+	; BX = width
+	mov dx, bx
+	inc dx
+	mov bx, cx
+
+	; ax - USED
+	; bx - frame width
+	; cx - write_line input parameter
+	; dx - loop counter
+	; si - palette ptr
+	; di - character ptr
 
 	jmp ??loop_test
 
 ??loop:
-	push cx
-
 	; cx = height
 	mov cx, bx
-	mov di, dx
 
 	call write_line
 
 	; Restore SI value
 	sub si, 6
 
-	pop cx
+	; Restore DI value
+	; di -= bx * 2 + 4
+	sub di, bx
+	sub di, bx
+	sub di, 4
 
 ??loop_test:
-	add dx, 0A0h
-	; Does test instruction usage worth it?
-	loop ??loop
+	add di, 0A0h
+	dec dx
+	jnz ??loop
 
 	; Write last line
 	add si, 6
-	mov di, dx
 	mov cx, bx
 	call write_line
 
