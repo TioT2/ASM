@@ -21,6 +21,8 @@ start:
         mov ax, 0b800h
         mov es, ax
 
+        ; Calculate message length
+
         mov di, 328            ; destination
         mov si, offset Palette ; palette
         mov bx, 4              ; height
@@ -55,7 +57,9 @@ start:
 ; OUT:
 ;	length - CX
 ; USES:
-;	AX, CX, DI
+;	AX
+;	CX (RESULT)
+;	DI (= DI_ + CX)
 get_message_len proc
 	; cx = -1
 	xor cx, cx
@@ -79,10 +83,12 @@ endp
 ;	palette     - DS:SI
 ;	length      - CX
 ; USES:
-;	SI, DI, CX, AX
+;	AX
+;	CX (= 0)
+;	DI (= DI_ + CX_ * 2 + 4)
+;	SI (= SI_ + 6)
 ; NOTE:
-;	Function adds exactly 6 to initial SI register value.
-;	Function adds exactly CX * 2 + 4 to initial DI value.
+;	This function IS NOT expected to be called from ANY function, except write_box
 write_line proc
 	; Load from [si] to ax
 	; Store palette entry to [di]
@@ -165,6 +171,57 @@ write_box proc
 	call write_line
 
 ??end:
+	ret
+endp
+
+; Write string
+; IN:
+;	string        - ES:DI
+;	location      - DS:SI
+;	string length - CX
+;	text color    - AH
+; USES:
+; 	AL
+;	CX (= 0)
+;	DI (= DX_ + CX_ * 2)
+;	SI (= SI_ + CX_)
+write_str proc
+	cld
+
+??loop:
+	; stosb is used to save pixel color
+	lodsb
+	stosw
+	loop ??loop
+
+	ret
+endp
+
+; Parse decimal string
+; IN:
+;	string - ES:DI
+; OUT:
+;	value - CX
+; USES:
+;	DI
+; NOTE:
+;	Function assumes, that input string is valid decimal string. If it's not, resulting value isn't defined.
+parse_string_dec proc
+	cld
+	xor ax, ax
+	xor cx, cx
+
+	jmp ??loop_end
+??loop:
+	mul 0Ah
+	add ax, al
+
+??loop_end:
+	mov cl, byte ptr [di]
+	inc di
+	sub cl, 30h
+	jb ??loop
+
 	ret
 endp
 

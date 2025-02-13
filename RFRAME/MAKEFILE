@@ -1,0 +1,21 @@
+run:
+	make rebuild
+	rframe
+
+rebuild:
+	make clean
+	make build
+
+clean:
+	del rframe.com
+	del rframe.obj
+	del rframe.lst
+	del rframe.map
+
+build: rframe.com
+
+rframe.com: rframe.obj
+	tlink /t /v rframe.obj
+
+rframe.obj:
+	tasm /la rframe.asm
