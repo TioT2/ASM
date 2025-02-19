@@ -52,25 +52,23 @@ endp
 
 ; Handler
 i09_handler proc
-	push ax bx
+	push ax
 
 	; Load current key
 	in al, 60h
-
-	mov bx, offset i08_key
-	mov cs:[bx], al
-
 	cmp al, 58h
 	jne ??end
 
+	push bx
+
 	mov bx, offset i08_enable_frame
 	mov al, cs:[bx]
-	; not al
-	xor al, 01h
+	not al
 	mov cs:[bx], al
 
+	pop bx
 ??end:
-	pop bx ax
+	pop ax
 
 	; longjmp
 	db 0EAh
@@ -82,35 +80,115 @@ endp
 i08_handler proc
 	; Rewrite frame
 
-	push ax bx es di
-
-	; mov al, i08_enable_frame
-	; test al, al
-	; jz ??handler_end
-
-	; Handler code
-	mov ax, 0B800h
-	mov es, ax
-	mov di, 5*80*2
-
-	mov ah, 4Ch
-	mov bx, offset i08_key
-	mov al, cs:[bx]
-
-	cld
-	stosw
+	push bx
 
 	mov bx, offset i08_enable_frame
-	mov al, cs:[bx]
-	stosw
+	mov bl, cs:[bx]
+	test bl, bl
+	jz ??handler_end
 
+	; Save ax, bx, cx, dx
+	mov bx, offset i08_register_storage
+
+	; Save ax
+	mov cs:[bx + 0], ax
+
+	; Load old bx into ax and save it
+	pop ax
+	mov cs:[bx + 2], ax
+	push ax
+
+	; Save cx
+	mov cs:[bx + 4], cx
+
+	; Save dx
+	mov cs:[bx + 6], dx
+
+	; Push reality
+	push ax cx dx es si ds di
+
+	; ds:si = cs:palette
+	push cs
+	pop ds
+	mov si, offset i08_frame_palette
+
+	; es:di = 0B800h:0
+	mov ax, 0B800h
+	mov es, ax
+	mov di, 0
+
+	mov bx, 04h
+	mov cx, 0Ch
+
+	call write_box
+
+	; Write register names
+	mov si, offset i08_regname_string
+	mov byte ptr cs:[si], 41h ; 'A'
+	mov di, 160 * 1 + 4
+	call write_string
+
+	mov si, offset i08_regname_string
+	mov byte ptr cs:[si], 42h ; 'B'
+	mov di, 160 * 2 + 4
+	call write_string
+
+	mov si, offset i08_regname_string
+	mov byte ptr cs:[si], 43h ; 'C'
+	mov di, 160 * 3 + 4
+	call write_string
+
+	mov si, offset i08_regname_string
+	mov byte ptr cs:[si], 44h ; 'D'
+	mov di, 160 * 4 + 4
+	call write_string
+
+	; Write register values
+
+	; Pop reality
+	pop di ds si es dx cx ax
 ??handler_end:
-	pop di es bx ax
+	pop bx
 
 	; Jump to old 08h handler
 	db 0EAh
 	i08_prev_handler_ptr dw 0FFFFh
 	i08_prev_handler_seg dw 0FFFFh
+endp
+
+; Parse hex digit in al into corresponding number
+; IN:
+;	number to parse - ax
+; OUT:
+;	number as hex digit - ax
+digit_to_char proc
+	add al, 30h
+	cmp al, 3Ah
+	jb ??end
+	add al, 11h
+??end:
+	ret
+endp
+
+; Write string to certain location
+; IN:
+;	string      - DS:SI
+;	destination - ES:DI
+; USES:
+;	AX
+write_string proc
+	jmp ??loop_cmp
+
+??loop_start:
+	stosb
+	inc di
+
+??loop_cmp:
+	lodsb
+	cmp al, 24h
+	jne ??loop_start
+
+	ret
 endp
 
 ; Write line by palette segment (e.g. single frame element)
@@ -126,8 +204,8 @@ endp
 ; NOTE:
 ;	This function IS NOT expected to be called from ANY function, except write_box
 write_line proc
-	; Load from [si] to ax
-	; Store palette entry to [di]
+	; Load from es:[si] to ax
+	; Store palette entry to es:[di]
 	lodsw
 	stosw
 
@@ -146,12 +224,17 @@ endp
 
 ; Write box
 ; IN:
-;	destination - di
-;	palette     - si
-;	height      - bx
-;	width       - cx
+;	destination - ES:DI
+;	palette     - DS:SI
+;	height      - BX
+;	width       - CX
 ; USES:
-;	AX, BX, CX, DX, DI, SI
+;	AX
+;	BX
+;	CX
+;	DX
+;	DI
+;	SI
 write_box proc
 	cld
 
@@ -212,11 +295,16 @@ endp
 
 ; Palette dw 0F30h, 0F31h, 0F32h, 0F33h, 0F34h, 0F35h, 0F36h, 0F37h, 0F38h, 0F39h
 ; Palette dw 0FC9h, 0FCDh, 0FBBh,    0FBAh, 0F20h, 0FBAh,    0FC8h, 0FCDh, 0FBCh
-Palette dw 0F0C9h, 0F0CDh, 0F0BBh,    0F0BAh, 0F021h, 0F0BAh,    0F0C8h, 0F0CDh, 0F0BCh
+i08_frame_palette dw 01EC9h, 01ECDh, 01EBBh,    01EBAh, 01E20h, 01EBAh,    01EC8h, 01ECDh, 01EBCh
 
 ; Global variable
-i08_key db 00h
-i08_enable_frame db 30h
+i08_enable_frame db 00h
+
+; Register storage
+i08_register_storage dw 0FFFFh, 0FFFFh, 0FFFFh, 0FFFFh
+
+; Register name string
+i08_regname_string db 'QX = $'
 
 ; End of program
 program_end:
