@@ -24,14 +24,22 @@ start:
 	; bx = addr of 09h interrupt
 	mov bx, 09h * 4
 
+	; Save old input handler
+	mov ax, es:[bx]
+	mov prev_handler_ptr, ax
+	mov ax, es:[bx + 2]
+	mov prev_handler_seg, ax
+
+	; Save current cx:[ax]
+	push cs
+	pop ax
+
 	; Clear Interrupt (disallow interrupt recieving)
 	cli ; <-----------------------!!!!!!!!!!!!!!!!!!!!!
 
-	mov es:[bx], offset input_int_handler
-
 	; User cannot use mov with CS
-	push cs
-	pop ax
+
+	mov es:[bx], offset input_int_handler
 	mov es:[bx+2], ax
 
 	; Set Interrupt (allow interrupt recieving)
@@ -72,6 +80,13 @@ input_int_handler proc
 	; Read from 60 port
 	in al, 60h
 	stosw
+
+	pop es di ax
+
+	; Longjump
+	db 0EAh
+	prev_handler_ptr dw 0FFFFh
+	prev_handler_seg dw 0FFFFh
 
 	; Make keyboard controller happy - write flag that keydown interrupt is handled.
 	; It's called 'blink' by highest(?) bit. It's probably ok to write 0 to port.
