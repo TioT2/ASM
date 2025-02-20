@@ -2,6 +2,8 @@
 
 .model tiny
 
+.286
+
 .code
 
 org 100h
@@ -85,7 +87,7 @@ i08_handler proc
 	mov bx, offset i08_enable_frame
 	mov bl, cs:[bx]
 	test bl, bl
-	jz ??handler_end
+	jz ??handler_middle
 
 	; Save ax, bx, cx, dx
 	mov bx, offset i08_register_storage
@@ -143,7 +145,31 @@ i08_handler proc
 	mov di, 160 * 4 + 4
 	call write_string
 
+	jmp ??handler_continue
+??handler_middle:
+	jmp ??handler_end	
+??handler_continue:
+
 	; Write register values
+	mov bx, offset i08_register_storage + 0
+	mov bx, cs:[bx]
+	mov di, 160 * 1 + 14
+	call write_register
+
+	mov bx, offset i08_register_storage + 2
+	mov bx, cs:[bx]
+	mov di, 160 * 2 + 14
+	call write_register
+
+	mov bx, offset i08_register_storage + 4
+	mov bx, cs:[bx]
+	mov di, 160 * 3 + 14
+	call write_register
+
+	mov bx, offset i08_register_storage + 6
+	mov bx, cs:[bx]
+	mov di, 160 * 4 + 14
+	call write_register
 
 	; Pop reality
 	pop di ds si es dx cx ax
@@ -162,11 +188,52 @@ endp
 ; OUT:
 ;	number as hex digit - ax
 digit_to_char proc
+	and al, 0Fh
+
 	add al, 30h
 	cmp al, 3Ah
 	jb ??end
-	add al, 11h
+	add al, 07h
 ??end:
+	ret
+endp
+
+; Write register at some destination
+; IN:
+;	destination - ES:DI
+;	register    - bx
+; USES:
+;	AX
+;	DI (= DI_ + 8)
+write_register proc
+	cld
+
+	mov ax, bx
+	shr ax, 12
+	call digit_to_char
+	stosb
+	inc di
+
+	mov ax, bx
+	shr ax, 8
+	and ax, 0Fh
+	call digit_to_char
+	stosb
+	inc di
+
+	mov ax, bx
+	shr ax, 4
+	and ax, 0Fh
+	call digit_to_char
+	stosb
+	inc di
+
+	mov ax, bx
+	and ax, 0Fh
+	call digit_to_char
+	stosb
+	inc di
+
 	ret
 endp
 
@@ -305,6 +372,9 @@ i08_register_storage dw 0FFFFh, 0FFFFh, 0FFFFh, 0FFFFh
 
 ; Register name string
 i08_regname_string db 'QX = $'
+
+; register value string
+i08_regvalue_string db 'FFFFh'
 
 ; End of program
 program_end:
