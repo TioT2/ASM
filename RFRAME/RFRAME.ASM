@@ -120,7 +120,7 @@ i08_handler proc
 	mov di, 0
 
 	mov bx, 04h
-	mov cx, 0Ch
+	mov cx, 0Bh
 
 	call write_box
 
@@ -129,46 +129,38 @@ i08_handler proc
 	mov byte ptr cs:[si], 41h ; 'A'
 	mov di, 160 * 1 + 4
 	call write_string
+	mov bx, offset i08_register_storage + 0
+	mov bx, cs:[bx]
+	call write_register
 
 	mov si, offset i08_regname_string
 	mov byte ptr cs:[si], 42h ; 'B'
 	mov di, 160 * 2 + 4
 	call write_string
+	mov bx, offset i08_register_storage + 2
+	mov bx, cs:[bx]
+	call write_register
 
-	mov si, offset i08_regname_string
-	mov byte ptr cs:[si], 43h ; 'C'
-	mov di, 160 * 3 + 4
-	call write_string
-
-	mov si, offset i08_regname_string
-	mov byte ptr cs:[si], 44h ; 'D'
-	mov di, 160 * 4 + 4
-	call write_string
-
+; Extend jump
 	jmp ??handler_continue
 ??handler_middle:
 	jmp ??handler_end	
 ??handler_continue:
 
-	; Write register values
-	mov bx, offset i08_register_storage + 0
-	mov bx, cs:[bx]
-	mov di, 160 * 1 + 14
-	call write_register
-
-	mov bx, offset i08_register_storage + 2
-	mov bx, cs:[bx]
-	mov di, 160 * 2 + 14
-	call write_register
-
+	mov si, offset i08_regname_string
+	mov byte ptr cs:[si], 43h ; 'C'
+	mov di, 160 * 3 + 4
+	call write_string
 	mov bx, offset i08_register_storage + 4
 	mov bx, cs:[bx]
-	mov di, 160 * 3 + 14
 	call write_register
 
+	mov si, offset i08_regname_string
+	mov byte ptr cs:[si], 44h ; 'D'
+	mov di, 160 * 4 + 4
+	call write_string
 	mov bx, offset i08_register_storage + 6
 	mov bx, cs:[bx]
-	mov di, 160 * 4 + 14
 	call write_register
 
 	; Pop reality
@@ -188,8 +180,6 @@ endp
 ; OUT:
 ;	number as hex digit - ax
 digit_to_char proc
-	and al, 0Fh
-
 	add al, 30h
 	cmp al, 3Ah
 	jb ??end
@@ -372,9 +362,6 @@ i08_register_storage dw 0FFFFh, 0FFFFh, 0FFFFh, 0FFFFh
 
 ; Register name string
 i08_regname_string db 'QX = $'
-
-; register value string
-i08_regvalue_string db 'FFFFh'
 
 ; End of program
 program_end:
