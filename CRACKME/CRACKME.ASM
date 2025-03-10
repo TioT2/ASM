@@ -10,70 +10,66 @@ org 100h
 
 ; Start function
 start proc
-	; Input to password buffer
-	mov di, offset password_buffer
-	call input_password
+	call login
 
-	; Print password string
-	mov ah, 09h
-	mov dx, offset password_buffer
-	int 21h
-
-	; Calculate password hash
-
-	; bx = password length
-	mov bx, di
-	sub bx, offset password_buffer + 1
-	mov si, offset password_buffer
-	call get_password_hash
-
-
-	mov ax, word ptr [offset password_hash]
-	cmp cx, ax
-	jne ??deny
-
-	mov ax, word ptr [offset password_hash + 2]
-	cmp dx, ax
-	jne ??deny
-
-??allow:
-	mov ah, 09h
-	mov dx, offset string_access_undenied
-	int 21h
-	jmp ??end
-
-??deny:
-	; Print 'access denied('
-	mov ah, 09h
-	mov dx, offset string_access_denied
-	int 21h
-	jmp ??end
-
-??end:
 	; Exit with 00h code
 	mov ax, 4C00h
 	int 21h
 	ret
 endp
 
-; Input password from cmd
-; IN:
-;	password dst - ES:DI
-; USES:
-;	AX
-;	DI (=[password end ptr])
-input_password proc
-??continue:
-	mov ah, 01h
-	int 21h
-	stosb
-	cmp al, 0Dh
-	jne ??continue
+; Login function
+login proc
+	; Input to password buffer
+	mov di, offset password_buffer
+	call input_password
 
-	; Write '$' instead of
-	dec di
-	mov al, 24h
-	stosb 
+	; Find password string end
+	mov si, offset password_buffer
+	call find_string_end
+	sub si, offset password_buffer
+	dec si
+	mov bx, si
+	mov si, offset password_buffer
+	call get_password_hash
+
+	; UUGH, shitcode
+	mov bx, offset correct_password_hash
+	mov bx, [bx]
+	cmp cx, bx
+	jne ??deny
+
+	mov bx, offset correct_password_hash + 2
+	mov bx, [bx]
+	cmp dx, bx
+	jne ??deny
+
+??allow:
+	call print_allowed
+	jmp ??end
+??deny:
+	call print_denied
+
+??end:
+	ret
+
+	password_buffer db "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+	correct_password_hash dw 028Dh, 08BBh, 07EBh, 0C95h
+endp
+
+; Find pointer to end character in string
+; IN:
+;	string ptr - DS:SI
+; OUT:
+;	DS:SI - string end ptr
+; USES:
+;	AL (= '$')
+;	SI (RET)
+find_string_end proc
+??continue:
+	lodsb
+	cmp al, 24h
+	jne ??continue
 	ret
 endp
 
@@ -101,9 +97,6 @@ get_password_hash proc
 	; decrement bx
 	dec bx
 
-	; S1 - CX
-	; S2 - DX
-
 	lodsb
 
 	; cx = (cx + ax)
@@ -128,10 +121,52 @@ get_password_hash proc
 	ret
 endp
 
-password_buffer db 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-password_hash dw 028Dh, 08BBh
-string_access_denied db "access denied($"
-string_access_undenied db "access undenied)$"
+; Input password from cmd
+; IN:
+;	password dst - ES:DI
+; USES:
+;	AX
+;	DI (=[password end ptr])
+input_password proc
+??continue:
+	mov ah, 01h
+	int 21h
+	stosb
+	cmp al, 0Dh
+	jne ??continue
+
+	; Write '$' instead of 0Dh
+	dec di
+	mov al, 24h
+	stosb
+	ret
+endp
+
+; Allowed
+; USES:
+;	AH
+;	DX
+print_allowed proc
+	mov ah, 09h
+	mov dx, offset string_access_allowed
+	int 21h
+	ret
+
+	string_access_allowed db "access allowed)$"
+endp
+
+; Denied
+; USES:
+;	AH
+;	DX
+print_denied proc
+	mov ah, 09h
+	mov dx, offset string_access_denied
+	int 21h
+	ret
+
+	string_access_denied db "access denied($"
+endp
 
 end start
 

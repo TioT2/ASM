@@ -9,25 +9,42 @@ String db "Hello world!!!1!", '$'
 
 ; Palette dw 0F30h, 0F31h, 0F32h, 0F33h, 0F34h, 0F35h, 0F36h, 0F37h, 0F38h, 0F39h
 ; Palette dw 0FC9h, 0FCDh, 0FBBh,    0FBAh, 0F20h, 0FBAh,    0FC8h, 0FCDh, 0FBCh
-Palette dw 0F0C9h, 0F0CDh, 0F0BBh,    0F0BAh, 0F021h, 0F0BAh,    0F0C8h, 0F0CDh, 0F0BCh
+Palette dw 0FC9h, 0FCDh, 0FBBh,    0FBAh, 0F20h, 0FBAh,    0FC8h, 0FCDh, 0FBCh
 
 .code
 
 org 100h
 locals ??
 
-start:
+start proc
         ; Initialize segment pointer
         mov ax, 0b800h
         mov es, ax
 
-        ; Calculate message length
+        ; Get message length (length at 80h).
+        mov di, 80h
+        xor cx, cx
+        mov cl, byte ptr [di]
+        add cx, 3
 
         mov di, 328            ; destination
         mov si, offset Palette ; palette
-        mov bx, 4              ; height
-        mov cx, 8              ; width
+        mov bx, 3              ; height
         call write_box
+
+	xor cx, cx
+
+	mov si, 80h
+	mov cl, byte ptr [si]
+	test cx, cx
+	jz ??end
+
+	mov si, offset Palette + 9
+	mov ah, byte ptr [si]
+
+	mov si, 81h
+	mov di, 652
+	call write_str
 
         ; mov bx, offset Palette
         ; mov cx, offset String
@@ -39,6 +56,8 @@ start:
         ; mov cx, 2Fh
         ; int 15h
 
+
+??end:
         ; Exit with 0 code.
         mov ax, 4C00h
         int 21h
@@ -50,6 +69,7 @@ start:
         ; ; Write palette element by address
         ; mov bx, 00h
         ; mov word ptr es:[bx], ax
+endp
 
 ; Calculate message length
 ; IN:
@@ -176,8 +196,8 @@ endp
 
 ; Write string
 ; IN:
-;	string        - ES:DI
-;	location      - DS:SI
+;	string        - DS:SI
+;	location      - ES:DI
 ;	string length - CX
 ;	text color    - AH
 ; USES:
@@ -203,6 +223,7 @@ endp
 ; OUT:
 ;	value - CX
 ; USES:
+;	BX (= 000Ah)
 ;	DI
 ; NOTE:
 ;	Function assumes, that input string is valid decimal string. If it's not, resulting value isn't defined.
@@ -211,16 +232,18 @@ parse_string_dec proc
 	xor ax, ax
 	xor cx, cx
 
+	mov bx, 0Ah
+
 	jmp ??loop_end
 ??loop:
-	mul 0Ah
-	add ax, al
+	mul bx
+	add ax, cx
 
 ??loop_end:
 	mov cl, byte ptr [di]
 	inc di
-	sub cl, 30h
-	jb ??loop
+	sub cx, 30h
+	jae ??loop
 
 	ret
 endp

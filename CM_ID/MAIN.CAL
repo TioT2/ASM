@@ -1,0 +1,31 @@
+
+1000:011c  Near procedure
+1000:0134  Near procedure
+
+*** INSTRUCTION USE FREQUENCY TABLE ***
+
+    b0  MOV       3
+    b8  MOV       7
+    8b  MOV       2
+    8e  MOV       1
+    8c  MOV       1
+    e8  CALL      2
+    3c  CMP       2
+    81  CMP       1
+    cd  INT       4
+    74  JZ        1
+    75  JNZ       2
+    c3  RET       2
+    fc  CLD       1
+    ac  LODSB     1
+    aa  STOSB     1
+    90  XCHG      1
+    03  ADD       1
+    f7  MUL       1
+    33  XOR       1
+
+*** DOS FUNCTION USE FREQUENCY TABLE ***
+
+    01h  1
+    09h  2
+    4ch  1

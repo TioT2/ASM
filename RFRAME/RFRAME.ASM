@@ -46,6 +46,7 @@ start proc
 	; Make program resident
 	mov ax, 3100h
 	mov dx, offset program_end
+
 	; Recalculate into paragraph
 	shr dx, 4
 	inc dx
@@ -61,14 +62,30 @@ i09_handler proc
 	cmp al, 58h
 	jne ??end
 
-	push bx
+	push bx ds si di
 
+	; Switch frame rendering flag
 	mov bx, offset i08_enable_frame
 	mov al, cs:[bx]
 	not al
 	mov cs:[bx], al
 
-	pop bx
+	test al, al
+	jnz ??case_end
+
+	; Display background buffer if handling is disabled
+	mov bx, offset display_background_buffer_callback
+	call iter_screen_buffers
+
+	; Sync background buffer and display it
+	; mov bx, offset sync_background_buffer_callback
+	; call iter_screen_buffers
+	; mov bx, offset display_background_buffer_callback
+	; call iter_screen_buffers
+
+??case_end:
+
+	pop di si ds bx
 ??end:
 	pop ax
 
@@ -77,6 +94,17 @@ i09_handler proc
 	i09_prev_handler_ptr dw 0FFFFh
 	i09_prev_handler_seg dw 0FFFFh
 endp
+
+; Write character
+m_write_register_string MACRO off, char, reg
+	mov si, offset i08_regname_string
+	mov byte ptr cs:[si], char ; 'B'
+	mov di, off
+	call write_string
+	mov bx, offset i08_register_storage + reg
+	mov bx, cs:[bx]
+	call write_register
+ENDM
 
 ; 08 interrupt handler
 i08_handler proc
@@ -89,57 +117,49 @@ i08_handler proc
 	test bl, bl
 	jz ??handler_middle
 
-	; Save ax, bx, cx, dx
+	; Save registers
+
 	mov bx, offset i08_register_storage
 
 	; Save ax
 	mov cs:[bx + 0], ax
 
-	; Load old bx into ax and save it
+	; Load BX from stack and save it
 	pop ax
 	mov cs:[bx + 2], ax
 	push ax
 
-	; Save cx
+	; Save cx, dx, sp, bp registers
 	mov cs:[bx + 4], cx
-
-	; Save dx
 	mov cs:[bx + 6], dx
+	mov cs:[bx + 8], sp
+	mov cs:[bx + 10], bp
 
 	; Push reality
 	push ax cx dx es si ds di
 
+	; Update background buffer
+	; Render new foreground buffer
+	; Display foreground buffer
+
+	; Sync current background buffer
+	mov bx, offset sync_background_buffer_callback
+	call iter_screen_buffers
+
+	; Render
 	; ds:si = cs:palette
 	push cs
 	pop ds
 	mov si, offset i08_frame_palette
 
-	; es:di = 0B800h:0
 	mov ax, 0B800h
 	mov es, ax
 	mov di, 0
 
-	mov bx, 04h
+	mov bx, 06h
 	mov cx, 0Bh
 
-	call write_box
-
-	; Write register names
-	mov si, offset i08_regname_string
-	mov byte ptr cs:[si], 41h ; 'A'
-	mov di, 160 * 1 + 4
-	call write_string
-	mov bx, offset i08_register_storage + 0
-	mov bx, cs:[bx]
-	call write_register
-
-	mov si, offset i08_regname_string
-	mov byte ptr cs:[si], 42h ; 'B'
-	mov di, 160 * 2 + 4
-	call write_string
-	mov bx, offset i08_register_storage + 2
-	mov bx, cs:[bx]
-	call write_register
+	; call write_box
 
 ; Extend jump
 	jmp ??handler_continue
@@ -147,22 +167,28 @@ i08_handler proc
 	jmp ??handler_end	
 ??handler_continue:
 
+	; Write X character
 	mov si, offset i08_regname_string
-	mov byte ptr cs:[si], 43h ; 'C'
-	mov di, 160 * 3 + 4
-	call write_string
-	mov bx, offset i08_register_storage + 4
-	mov bx, cs:[bx]
-	call write_register
+	mov byte ptr cs:[si + 1], 58h ; 'X'
 
+	; Display ax..dx registers
+	; m_write_register_string 00A4h, 41h, 0
+	; m_write_register_string 0144h, 42h, 2
+	; m_write_register_string 01E4h, 43h, 4
+	; m_write_register_string 0284h, 44h, 6
+
+	; Write P character
 	mov si, offset i08_regname_string
-	mov byte ptr cs:[si], 44h ; 'D'
-	mov di, 160 * 4 + 4
-	call write_string
-	mov bx, offset i08_register_storage + 6
-	mov bx, cs:[bx]
-	call write_register
+	mov byte ptr cs:[si + 1], 50h ; 'P'
 
+	; Display sp and bp registers.
+	; m_write_register_string 0324h, 53h, 8
+	; m_write_register_string 03C4h, 42h, 10
+
+	; Display rendered buffer contents
+	mov bx, offset display_render_buffer_callback
+	call iter_screen_buffers
+	
 	; Pop reality
 	pop di ds si es dx cx ax
 ??handler_end:
@@ -337,6 +363,7 @@ write_box proc
 	sub di, 4
 
 ??loop_test:
+	; di += 160
 	add di, 0A0h
 	dec dx
 	jnz ??loop
@@ -350,6 +377,104 @@ write_box proc
 	ret
 endp
 
+
+; Read background buffer from screen
+read_background_buffer_callback proc
+	mov ax, ds:[si]
+	mov cs:[di + offset i08_background_buffer], ax
+	ret
+endp
+
+display_background_buffer_callback proc
+	; Load value from render buffer and store it to DS:SI
+	mov ax, cs:[di + offset i08_background_buffer]
+	mov ds:[si], ax
+	ret
+endp
+
+display_render_buffer_callback proc
+	mov ax, cs:[di + offset i08_render_buffer]
+	mov ds:[si], ax
+	ret
+endp
+
+sync_background_buffer_callback proc
+	; AX = pixel color
+	mov ax, ds:[si]
+
+	; Skip writing background buffer if value is same with value in render buffer (e.g. external code doesn't modified pixel value)
+	cmp ax, cs:[di + offset i08_render_buffer]
+	je ??end
+
+	; Write new pixel color to background buffer
+	mov cs:[di + offset i08_background_buffer], ax
+
+??end:
+	ret
+endp
+
+; Update background buffer contents
+; IN:
+;	per-pixel callback pointer - bx
+; USES:
+;	AX
+;	DS (= B800)
+;	SI
+;	DI
+; NOTE:
+;	callback pointer signature:
+;	IN:
+;		buffer offset - DI
+;		pixel pointer - DS:SI
+;	USES:
+;		DI (= _DI)
+;		DS (= _DS)
+;		SI (= _SI)
+iter_screen_buffers proc
+	; DS:SI = B800:0000 (screen ptr)
+	mov ax, 0B800h
+	mov ds, ax
+	xor si, si
+
+	; DI = 0
+	xor di, di
+
+	; jmp ??y_loop_cmp
+
+??y_loop_start:
+
+??x_loop_start:
+
+	; Call function
+	call bx
+
+??x_loop_cmp:
+	; si += 2; di += 2;
+
+	inc si
+	inc si
+	inc di
+	inc di
+
+	; if di % 32 < 26: goto x_loop_start
+	mov ax, di
+	and ax, 1Fh
+	cmp ax, 1Ah
+	jb ??x_loop_start
+
+??y_loop_cmp:
+	; si = si - 13 * 2 + 80 * 2
+	add si, 134
+
+	; di = di - 13 * 2 + 16 * 2
+	add di, 6
+
+	cmp si, 8 * 160 + 0 ; check if si points to (0, 25) pixel
+	jb ??y_loop_start
+
+	ret
+endp
+
 ; Palette dw 0F30h, 0F31h, 0F32h, 0F33h, 0F34h, 0F35h, 0F36h, 0F37h, 0F38h, 0F39h
 ; Palette dw 0FC9h, 0FCDh, 0FBBh,    0FBAh, 0F20h, 0FBAh,    0FC8h, 0FCDh, 0FBCh
 i08_frame_palette dw 01EC9h, 01ECDh, 01EBBh,    01EBAh, 01E20h, 01EBAh,    01EC8h, 01ECDh, 01EBCh
@@ -358,10 +483,16 @@ i08_frame_palette dw 01EC9h, 01ECDh, 01EBBh,    01EBAh, 01E20h, 01EBAh,    01EC8
 i08_enable_frame db 00h
 
 ; Register storage
-i08_register_storage dw 0FFFFh, 0FFFFh, 0FFFFh, 0FFFFh
+i08_register_storage dw 0FFFFh, 0FFFFh, 0FFFFh, 0FFFFh, 0FFFFh, 0FFFFh
 
 ; Register name string
-i08_regname_string db 'QX = $'
+i08_regname_string db 'QQ = $'
+
+; Rendering destination
+i08_render_buffer dw 256 dup (?)
+
+; Previous background
+i08_background_buffer dw 256 dup (?)
 
 ; End of program
 program_end:
