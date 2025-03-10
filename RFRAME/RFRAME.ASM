@@ -96,15 +96,15 @@ i09_handler proc
 endp
 
 ; Write character
-m_write_register_string MACRO off, char, reg
+m_write_register_string macro off, regname, reg
 	mov si, offset i08_regname_string
-	mov byte ptr cs:[si], char ; 'B'
-	mov di, off
+	mov word ptr cs:[si], regname ; 'BX'
+	mov di, off + offset i08_render_buffer
 	call write_string
 	mov bx, offset i08_register_storage + reg
 	mov bx, cs:[bx]
 	call write_register
-ENDM
+endm
 
 ; 08 interrupt handler
 i08_handler proc
@@ -152,14 +152,17 @@ i08_handler proc
 	pop ds
 	mov si, offset i08_frame_palette
 
-	mov ax, 0B800h
+	push cs
+	pop ax
 	mov es, ax
-	mov di, 0
+	mov ds, ax
+
+	mov di, offset i08_render_buffer
 
 	mov bx, 06h
 	mov cx, 0Bh
 
-	; call write_box
+	call write_box
 
 ; Extend jump
 	jmp ??handler_continue
@@ -167,23 +170,13 @@ i08_handler proc
 	jmp ??handler_end	
 ??handler_continue:
 
-	; Write X character
-	mov si, offset i08_regname_string
-	mov byte ptr cs:[si + 1], 58h ; 'X'
-
-	; Display ax..dx registers
-	; m_write_register_string 00A4h, 41h, 0
-	; m_write_register_string 0144h, 42h, 2
-	; m_write_register_string 01E4h, 43h, 4
-	; m_write_register_string 0284h, 44h, 6
-
-	; Write P character
-	mov si, offset i08_regname_string
-	mov byte ptr cs:[si + 1], 50h ; 'P'
-
-	; Display sp and bp registers.
-	; m_write_register_string 0324h, 53h, 8
-	; m_write_register_string 03C4h, 42h, 10
+	; Display registers
+	m_write_register_string 0024h, 5841h, 0  ; AX
+	m_write_register_string 0044h, 5842h, 2  ; BX
+	m_write_register_string 0064h, 5843h, 4  ; CX
+	m_write_register_string 0084h, 5844h, 6  ; DX
+	m_write_register_string 00A4h, 5053h, 8  ; SP
+	m_write_register_string 00C4h, 5042h, 10 ; BP
 
 	; Display rendered buffer contents
 	mov bx, offset display_render_buffer_callback
@@ -363,8 +356,11 @@ write_box proc
 	sub di, 4
 
 ??loop_test:
-	; di += 160
-	add di, 0A0h
+	; ; di += 160
+	; add di, 0A0h
+
+	; di += 32
+	add di, 20h
 	dec dx
 	jnz ??loop
 
